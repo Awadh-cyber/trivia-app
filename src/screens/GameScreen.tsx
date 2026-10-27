@@ -8,7 +8,7 @@ import { QuestionCard } from '../components/QuestionCard';
 import { ResultsSummary } from '../components/ResultsSummary';
 import { ScoreDisplay } from '../components/ScoreDisplay';
 import { StatusMessage } from '../components/StatusMessage';
-import { useQuiz } from '../hooks/useQuiz';
+import { MAX_AUTO_RETRIES, useQuiz } from '../hooks/useQuiz';
 import { colors, MAX_CONTENT_WIDTH, spacing } from '../theme';
 
 /** The single game screen: loading, error, quiz and results all live here. */
@@ -24,6 +24,16 @@ export function GameScreen() {
   function renderContent() {
     if (quiz.phase === 'loading') {
       return <StatusMessage loading title="Getting fresh questions…" message="From Open Trivia Database" />;
+    }
+
+    if (quiz.isAutoRetrying) {
+      return (
+        <StatusMessage
+          emoji="⏳"
+          title={`Trying again in ${Math.max(quiz.retryWaitSeconds, 1)}…`}
+          message={`The trivia server is busy because lots of people on this Wi-Fi are playing. Please wait 5 seconds. (Try ${quiz.autoRetryAttempt} of ${MAX_AUTO_RETRIES})`}
+        />
+      );
     }
 
     if (quiz.phase === 'error') {

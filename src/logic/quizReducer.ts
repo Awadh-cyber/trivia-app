@@ -11,12 +11,14 @@ export interface QuizState {
   errorMessage: string | null;
   /** When Retry may be tapped again (used after a rate limit), as a Date.now() time. */
   retryAvailableAt: number | null;
+  /** True while the app is counting down to try again by itself. */
+  autoRetry: boolean;
 }
 
 export type QuizAction =
   | { type: 'LOAD_START' }
   | { type: 'LOAD_SUCCESS'; questions: Question[] }
-  | { type: 'LOAD_FAILURE'; message: string; retryAvailableAt?: number | null }
+  | { type: 'LOAD_FAILURE'; message: string; retryAvailableAt?: number | null; autoRetry?: boolean }
   | { type: 'ANSWER'; choiceIndex: number }
   | { type: 'NEXT' };
 
@@ -27,6 +29,7 @@ export const initialQuizState: QuizState = {
   answers: [],
   errorMessage: null,
   retryAvailableAt: null,
+  autoRetry: false,
 };
 
 /** True once the player has answered the question currently on screen. */
@@ -73,6 +76,7 @@ export function quizReducer(state: QuizState, action: QuizAction): QuizState {
         phase: 'error',
         errorMessage: action.message,
         retryAvailableAt: action.retryAvailableAt ?? null,
+        autoRetry: action.autoRetry === true && action.retryAvailableAt != null,
       };
 
     case 'ANSWER': {

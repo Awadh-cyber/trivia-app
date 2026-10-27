@@ -16,6 +16,8 @@ export const TOKEN_URL = 'https://opentdb.com/api_token.php';
 const REQUEST_TIMEOUT_MS = 10_000;
 /** 5 seconds from the docs, plus a small safety margin. */
 export const MIN_GAP_BETWEEN_REQUESTS_MS = 5_500;
+/** How long the player waits after the server says "too many requests". */
+export const RATE_LIMIT_WAIT_MS = 5_000;
 
 type FetchLike = (url: string, init?: { signal?: AbortSignal; headers?: Record<string, string> }) => Promise<Response>;
 
@@ -59,7 +61,7 @@ function readResponseCode(body: unknown): number | undefined {
 }
 
 function rateLimitError(): QuestionLoadError {
-  return new QuestionLoadError('rate-limit', 'Open Trivia Database rate limit reached (code 5).', MIN_GAP_BETWEEN_REQUESTS_MS);
+  return new QuestionLoadError('rate-limit', 'Open Trivia Database rate limit reached (code 5).', RATE_LIMIT_WAIT_MS);
 }
 
 /** One HTTP request with a timeout. Turns every kind of failure into a QuestionLoadError. */

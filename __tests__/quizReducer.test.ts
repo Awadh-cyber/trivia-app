@@ -168,6 +168,22 @@ describe('quizReducer', () => {
     const loading = run([{ type: 'LOAD_START' }]);
     const failed = run([{ type: 'LOAD_FAILURE', message: 'Too many requests', retryAvailableAt: 12345 }], loading);
     expect(failed.retryAvailableAt).toBe(12345);
+    expect(failed.autoRetry).toBe(false);
     expect(run([{ type: 'LOAD_START' }], failed).retryAvailableAt).toBeNull();
+  });
+
+  it('marks a rate-limit failure for the automatic 5-second retry, and clears it on the next load', () => {
+    const loading = run([{ type: 'LOAD_START' }]);
+    const waiting = run(
+      [{ type: 'LOAD_FAILURE', message: 'Too many requests', retryAvailableAt: 5000, autoRetry: true }],
+      loading,
+    );
+    expect(waiting.phase).toBe('error');
+    expect(waiting.autoRetry).toBe(true);
+    expect(run([{ type: 'LOAD_START' }], waiting).autoRetry).toBe(false);
+
+    // Without a wait time there is nothing to count down, so no automatic retry.
+    const noWait = run([{ type: 'LOAD_FAILURE', message: 'offline', autoRetry: true }], loading);
+    expect(noWait.autoRetry).toBe(false);
   });
 });

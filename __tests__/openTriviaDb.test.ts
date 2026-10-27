@@ -1,4 +1,4 @@
-import { createOpenTriviaClient, MIN_GAP_BETWEEN_REQUESTS_MS, QUESTIONS_URL } from '../src/api/openTriviaDb';
+import { createOpenTriviaClient, QUESTIONS_URL } from '../src/api/openTriviaDb';
 import { QuestionLoadError } from '../src/data/questionErrors';
 
 type Reply = { status?: number; body?: unknown; throws?: boolean; badJson?: boolean; hang?: boolean };
@@ -99,7 +99,7 @@ describe('Open Trivia Database client', () => {
     const limited = { status: 429, body: { response_code: 5, result: [] } };
     const { fetchImpl, calls } = fakeFetch([TOKEN_OK], [limited]);
     const promise = client(fetchImpl).fetchQuestions();
-    await expect(promise).rejects.toMatchObject({ kind: 'rate-limit', retryAfterMs: MIN_GAP_BETWEEN_REQUESTS_MS });
+    await expect(promise).rejects.toMatchObject({ kind: 'rate-limit', retryAfterMs: 5000 });
     expect(calls.filter((url) => url.includes('api.php'))).toHaveLength(1);
 
     const { fetchImpl: f2 } = fakeFetch([TOKEN_OK], [{ body: { response_code: 5, results: [] } }]);

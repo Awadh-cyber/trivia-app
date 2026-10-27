@@ -35,7 +35,8 @@ This runs the TypeScript check and the Jest tests in `__tests__/`. The API tests
   - If that retry also fails, the app shows an error. It never keeps retrying on its own.
 - **Rate limit.** The server allows one request every 5 seconds per internet address, and everyone on the same Wi-Fi shares that address.
   - The app waits if your last request was under 5 seconds ago.
-  - If the server still says "too many requests" (HTTP 429 / code 5), the app shows an error with a short countdown before Retry works.
+  - If the server still says "too many requests" (HTTP 429 / code 5), the app shows a 5-second countdown ("Trying again in 5…") and then tries again by itself.
+  - It does this at most 3 times. After that it shows an error with a Retry button, so it never retries forever.
 - **Errors.** No internet, a timeout after 10 seconds, server errors, broken data, or fewer than 5 usable questions all show a friendly message with a Retry button. The app never falls back to old fixed questions.
 - **Limits.** Repeats are still possible: in the first game after opening the app (if the token request fails), after the token is reset, or in a new app session.
 
