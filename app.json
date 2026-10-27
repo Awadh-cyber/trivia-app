@@ -1,0 +1,14 @@
+{
+  "expo": {
+    "name": "Trivia on Your Phone",
+    "slug": "trivia-app",
+    "owner": "ahmad_awadh",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#0B1736",
+    "ios": {
+      "supportsTablet": true
+    }
+  }
+}

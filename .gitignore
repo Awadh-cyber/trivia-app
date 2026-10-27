@@ -1,0 +1,32 @@
+# Dependencies
+node_modules/
+
+# Expo-generated files
+.expo/
+expo-env.d.ts
+.kotlin/
+ios/
+android/
+
+# Build output
+dist/
+web-build/
+build/
+coverage/
+
+# Secrets and signing files (never commit these)
+.env
+.env*.local
+*.pem
+*.key
+*.p8
+*.p12
+*.jks
+*.keystore
+*.mobileprovision
+credentials.json
+
+# Logs and OS files
+*.log
+npm-debug.*
+.DS_Store
