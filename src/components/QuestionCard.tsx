@@ -54,7 +54,7 @@ export function QuestionCard({ question, answer, onAnswer }: QuestionCardProps) 
             {answer.isCorrect ? '🎉 Correct! +1 point' : '❌ Incorrect. No points this time.'}
           </Text>
           {!answer.isCorrect && <Text style={styles.feedbackText}>The correct answer is {correctText}.</Text>}
-          <Text style={styles.feedbackText}>{question.explanation}</Text>
+          {question.explanation && <Text style={styles.feedbackText}>{question.explanation}</Text>}
         </View>
       )}
     </View>

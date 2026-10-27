@@ -10,10 +10,19 @@ interface StatusMessageProps {
   loading?: boolean;
   actionTitle?: string;
   onAction?: () => void;
+  actionDisabled?: boolean;
 }
 
 /** Used for the loading, error and empty states, with an optional recovery button. */
-export function StatusMessage({ emoji, title, message, loading = false, actionTitle, onAction }: StatusMessageProps) {
+export function StatusMessage({
+  emoji,
+  title,
+  message,
+  loading = false,
+  actionTitle,
+  onAction,
+  actionDisabled = false,
+}: StatusMessageProps) {
   return (
     <View style={styles.container} accessibilityLiveRegion="polite">
       {loading && <ActivityIndicator size="large" color={colors.turquoise} />}
@@ -28,7 +37,7 @@ export function StatusMessage({ emoji, title, message, loading = false, actionTi
       {message && <Text style={styles.message}>{message}</Text>}
       {actionTitle && onAction && (
         <View style={styles.button}>
-          <PrimaryButton title={actionTitle} onPress={onAction} />
+          <PrimaryButton title={actionTitle} onPress={onAction} disabled={actionDisabled} />
         </View>
       )}
     </View>

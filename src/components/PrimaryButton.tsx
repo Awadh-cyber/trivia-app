@@ -8,7 +8,7 @@ interface PrimaryButtonProps {
   disabled?: boolean;
 }
 
-/** The big turquoise button used for Next question, View results, Play again and Try again. */
+/** The big turquoise button used for Next question, View results, Play again and Retry. */
 export function PrimaryButton({ title, onPress, disabled = false }: PrimaryButtonProps) {
   return (
     <Pressable

@@ -9,15 +9,16 @@ export interface QuizState {
   /** One record per answered question, in order. Score is counted from these. */
   answers: AnswerRecord[];
   errorMessage: string | null;
+  /** When Retry may be tapped again (used after a rate limit), as a Date.now() time. */
+  retryAvailableAt: number | null;
 }
 
 export type QuizAction =
   | { type: 'LOAD_START' }
   | { type: 'LOAD_SUCCESS'; questions: Question[] }
-  | { type: 'LOAD_FAILURE'; message: string }
+  | { type: 'LOAD_FAILURE'; message: string; retryAvailableAt?: number | null }
   | { type: 'ANSWER'; choiceIndex: number }
-  | { type: 'NEXT' }
-  | { type: 'RESTART' };
+  | { type: 'NEXT' };
 
 export const initialQuizState: QuizState = {
   phase: 'loading',
@@ -25,6 +26,7 @@ export const initialQuizState: QuizState = {
   currentIndex: 0,
   answers: [],
   errorMessage: null,
+  retryAvailableAt: null,
 };
 
 /** True once the player has answered the question currently on screen. */
@@ -55,14 +57,23 @@ export function isLastQuestion(state: QuizState): boolean {
  */
 export function quizReducer(state: QuizState, action: QuizAction): QuizState {
   switch (action.type) {
+    // Starting a new game (first launch, Play again or Retry) wipes all progress.
     case 'LOAD_START':
       return { ...initialQuizState };
 
+    // Results only count while we are waiting for them.
     case 'LOAD_SUCCESS':
+      if (state.phase !== 'loading') return state;
       return { ...initialQuizState, phase: 'playing', questions: action.questions };
 
     case 'LOAD_FAILURE':
-      return { ...initialQuizState, phase: 'error', errorMessage: action.message };
+      if (state.phase !== 'loading') return state;
+      return {
+        ...initialQuizState,
+        phase: 'error',
+        errorMessage: action.message,
+        retryAvailableAt: action.retryAvailableAt ?? null,
+      };
 
     case 'ANSWER': {
       const question = getCurrentQuestion(state);
@@ -92,13 +103,6 @@ export function quizReducer(state: QuizState, action: QuizAction): QuizState {
         return { ...state, phase: 'finished' };
       }
       return { ...state, currentIndex: state.currentIndex + 1 };
-    }
-
-    case 'RESTART': {
-      if (state.questions.length === 0) {
-        return state;
-      }
-      return { ...initialQuizState, phase: 'playing', questions: state.questions };
     }
 
     default:

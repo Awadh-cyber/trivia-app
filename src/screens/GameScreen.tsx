@@ -23,7 +23,7 @@ export function GameScreen() {
 
   function renderContent() {
     if (quiz.phase === 'loading') {
-      return <StatusMessage loading title="Loading questions…" />;
+      return <StatusMessage loading title="Getting fresh questions…" message="From Open Trivia Database" />;
     }
 
     if (quiz.phase === 'error') {
@@ -31,15 +31,16 @@ export function GameScreen() {
         <StatusMessage
           emoji="😕"
           title="We couldn’t load the questions"
-          message={quiz.errorMessage ?? 'Something went wrong with the question data.'}
-          actionTitle="Try again"
+          message={quiz.errorMessage ?? 'Something went wrong while loading questions.'}
+          actionTitle={quiz.retryWaitSeconds > 0 ? `Retry in ${quiz.retryWaitSeconds}s` : 'Retry'}
+          actionDisabled={quiz.retryWaitSeconds > 0}
           onAction={quiz.retry}
         />
       );
     }
 
     if (quiz.phase === 'finished') {
-      return <ResultsSummary score={quiz.score} total={quiz.totalQuestions} onPlayAgain={quiz.restart} />;
+      return <ResultsSummary score={quiz.score} total={quiz.totalQuestions} onPlayAgain={quiz.playAgain} />;
     }
 
     if (!quiz.question) {
@@ -48,7 +49,7 @@ export function GameScreen() {
           emoji="📭"
           title="No questions to show"
           message="There are no questions available right now."
-          actionTitle="Try again"
+          actionTitle="Retry"
           onAction={quiz.retry}
         />
       );
@@ -89,6 +90,8 @@ export function GameScreen() {
           </View>
 
           {renderContent()}
+
+          <Text style={styles.credit}>Questions from Open Trivia Database (opentdb.com), CC BY-SA 4.0</Text>
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -136,5 +139,10 @@ const styles = StyleSheet.create({
   },
   quiz: {
     gap: spacing.lg,
+  },
+  credit: {
+    color: colors.textMuted,
+    fontSize: 13,
+    textAlign: 'center',
   },
 });

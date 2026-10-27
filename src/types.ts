@@ -1,14 +1,15 @@
 /**
- * One trivia question.
+ * One trivia question, ready to play.
  * `correctIndex` points at the right answer inside `choices` (0 to 3).
- * Any future question source (internet, AI) only needs to produce this shape.
+ * Any question source (Open Trivia Database today, maybe AI later) only needs to produce this shape.
  */
 export interface Question {
   id: string;
   question: string;
   choices: [string, string, string, string];
   correctIndex: number;
-  explanation: string;
+  /** Optional extra fact shown after answering. Open Trivia Database does not provide one. */
+  explanation?: string;
 }
 
 /** What the player picked for one question. */

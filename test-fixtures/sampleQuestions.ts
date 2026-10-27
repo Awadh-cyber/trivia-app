@@ -1,7 +1,7 @@
-import type { Question } from '../types';
+import type { Question } from '../src/types';
 
-/** The five local General Knowledge questions used by the Core level. */
-export const generalKnowledgeQuestions: Question[] = [
+/** Five fixed sample questions used only by the tests (the app now loads questions from Open Trivia Database). */
+export const sampleQuestions: Question[] = [
   {
     id: 'gk-largest-ocean',
     question: 'What is the largest ocean on Earth?',
