@@ -1,5 +1,6 @@
 import { sampleQuestions as questions } from '../test-fixtures/sampleQuestions';
 import {
+  PLAY_AGAIN_COOLDOWN_MS,
   getScore,
   initialQuizState,
   isCurrentAnswered,
@@ -12,7 +13,7 @@ function run(actions: QuizAction[], start: QuizState = initialQuizState): QuizSt
   return actions.reduce(quizReducer, start);
 }
 
-const started = run([{ type: 'LOAD_SUCCESS', questions }]);
+const started = run([{ type: 'LOAD_START' }, { type: 'LOAD_SUCCESS', questions }]);
 const correctOf = (i: number) => questions[i].correctIndex;
 const wrongOf = (i: number) => (questions[i].correctIndex + 1) % 4;
 
@@ -61,12 +62,12 @@ describe('quizReducer', () => {
   });
 
   it('will not move on before the question is answered', () => {
-    const state = run([{ type: 'NEXT' }, { type: 'NEXT' }], started);
+    const state = run([{ type: 'NEXT', now: 0 }, { type: 'NEXT', now: 0 }], started);
     expect(state.currentIndex).toBe(0);
   });
 
   it('moves forward only one question when Next is double tapped', () => {
-    const state = run([{ type: 'ANSWER', choiceIndex: correctOf(0) }, { type: 'NEXT' }, { type: 'NEXT' }], started);
+    const state = run([{ type: 'ANSWER', choiceIndex: correctOf(0) }, { type: 'NEXT', now: 0 }, { type: 'NEXT', now: 0 }], started);
     expect(state.currentIndex).toBe(1);
     expect(isCurrentAnswered(state)).toBe(false);
   });
@@ -81,7 +82,7 @@ describe('quizReducer', () => {
     const pattern = [true, false, true, true, false];
     const actions: QuizAction[] = pattern.flatMap((right, i) => [
       { type: 'ANSWER', choiceIndex: right ? correctOf(i) : wrongOf(i) } as QuizAction,
-      { type: 'NEXT' } as QuizAction,
+      { type: 'NEXT', now: 0 } as QuizAction,
     ]);
 
     const beforeLastNext = run(actions.slice(0, -1), started);
@@ -95,7 +96,7 @@ describe('quizReducer', () => {
 
     // Extra taps after the results cannot change anything.
     const afterExtraTaps = run(
-      [{ type: 'NEXT' }, { type: 'ANSWER', choiceIndex: correctOf(4) }, { type: 'NEXT' }],
+      [{ type: 'NEXT', now: 0 }, { type: 'ANSWER', choiceIndex: correctOf(4) }, { type: 'NEXT', now: 0 }],
       finished,
     );
     expect(afterExtraTaps).toBe(finished);
@@ -106,7 +107,7 @@ describe('quizReducer', () => {
       run(
         questions.flatMap((_, i) => [
           { type: 'ANSWER', choiceIndex: pick(i) } as QuizAction,
-          { type: 'NEXT' } as QuizAction,
+          { type: 'NEXT', now: 0 } as QuizAction,
         ]),
         started,
       );
@@ -114,37 +115,66 @@ describe('quizReducer', () => {
     expect(getScore(play(wrongOf))).toBe(0);
   });
 
-  it('Play again completely resets the game and loads a new set', () => {
-    const finished = run(
+  const finishedAt = 1_000_000;
+  function finishGame(): QuizState {
+    return run(
       questions.flatMap((_, i) => [
         { type: 'ANSWER', choiceIndex: correctOf(i) } as QuizAction,
-        { type: 'NEXT' } as QuizAction,
+        { type: 'NEXT', now: finishedAt } as QuizAction,
       ]),
       started,
     );
+  }
+
+  it('locks Play again for 5 seconds after the results appear', () => {
+    const finished = finishGame();
     expect(finished.phase).toBe('finished');
+    expect(PLAY_AGAIN_COOLDOWN_MS).toBe(5000);
+    expect(finished.playAgainAvailableAt).toBe(finishedAt + 5000);
+  });
 
-    // Play again = start loading a new game.
+  it('keeps the results on screen while the next game loads', () => {
+    const finished = finishGame();
     const loading = run([{ type: 'LOAD_START' }], finished);
-    expect(loading.phase).toBe('loading');
-    expect(loading.questions).toEqual([]);
-    expect(loading.answers).toEqual([]);
-    expect(loading.currentIndex).toBe(0);
+    expect(loading.phase).toBe('finished');
+    expect(loading.isLoading).toBe(true);
+    expect(getScore(loading)).toBe(5);
+    expect(loading.answers).toHaveLength(5);
+  });
 
+  it('Play again completely resets the game once the new set has loaded', () => {
+    const loading = run([{ type: 'LOAD_START' }], finishGame());
     const newSet = questions.map((q) => ({ ...q, id: `new-${q.id}` }));
     const restarted = run([{ type: 'LOAD_SUCCESS', questions: newSet }], loading);
     expect(restarted.phase).toBe('playing');
+    expect(restarted.isLoading).toBe(false);
     expect(restarted.currentIndex).toBe(0);
     expect(restarted.answers).toEqual([]);
     expect(getScore(restarted)).toBe(0);
     expect(isCurrentAnswered(restarted)).toBe(false);
     expect(restarted.errorMessage).toBeNull();
+    expect(restarted.playAgainAvailableAt).toBeNull();
     expect(restarted.questions[0].id).toBe(`new-${questions[0].id}`);
   });
 
-  it('ignores answers and Next taps while a new game is loading', () => {
-    const loading = run([{ type: 'LOAD_START' }], started);
-    expect(run([{ type: 'ANSWER', choiceIndex: 0 }, { type: 'NEXT' }], loading)).toBe(loading);
+  it('keeps the results if loading the next game fails, and shows the problem with a retry time', () => {
+    const loading = run([{ type: 'LOAD_START' }], finishGame());
+    const failed = run([{ type: 'LOAD_FAILURE', message: 'busy', retryAvailableAt: 42 }], loading);
+    expect(failed.phase).toBe('finished');
+    expect(getScore(failed)).toBe(5);
+    expect(failed.isLoading).toBe(false);
+    expect(failed.errorMessage).toBe('busy');
+    expect(failed.retryAvailableAt).toBe(42);
+  });
+
+  it('ignores a second LOAD_START while one is already loading (no duplicate requests)', () => {
+    const loading = run([{ type: 'LOAD_START' }], finishGame());
+    expect(run([{ type: 'LOAD_START' }], loading)).toBe(loading);
+  });
+
+  it('ignores answers and Next taps while the first game is loading', () => {
+    const loading = run([{ type: 'LOAD_START' }]);
+    expect(run([{ type: 'ANSWER', choiceIndex: 0 }, { type: 'NEXT', now: 0 }], loading)).toBe(loading);
   });
 
   it('ignores a late result that arrives after the game already started', () => {
@@ -155,7 +185,7 @@ describe('quizReducer', () => {
   });
 
   it('shows an error state when loading fails, and retry starts loading again', () => {
-    const failed = run([{ type: 'LOAD_FAILURE', message: 'No questions were found.' }]);
+    const failed = run([{ type: 'LOAD_START' }, { type: 'LOAD_FAILURE', message: 'No questions were found.' }]);
     expect(failed.phase).toBe('error');
     expect(failed.errorMessage).toBe('No questions were found.');
 
@@ -168,22 +198,6 @@ describe('quizReducer', () => {
     const loading = run([{ type: 'LOAD_START' }]);
     const failed = run([{ type: 'LOAD_FAILURE', message: 'Too many requests', retryAvailableAt: 12345 }], loading);
     expect(failed.retryAvailableAt).toBe(12345);
-    expect(failed.autoRetry).toBe(false);
     expect(run([{ type: 'LOAD_START' }], failed).retryAvailableAt).toBeNull();
-  });
-
-  it('marks a rate-limit failure for the automatic 5-second retry, and clears it on the next load', () => {
-    const loading = run([{ type: 'LOAD_START' }]);
-    const waiting = run(
-      [{ type: 'LOAD_FAILURE', message: 'Too many requests', retryAvailableAt: 5000, autoRetry: true }],
-      loading,
-    );
-    expect(waiting.phase).toBe('error');
-    expect(waiting.autoRetry).toBe(true);
-    expect(run([{ type: 'LOAD_START' }], waiting).autoRetry).toBe(false);
-
-    // Without a wait time there is nothing to count down, so no automatic retry.
-    const noWait = run([{ type: 'LOAD_FAILURE', message: 'offline', autoRetry: true }], loading);
-    expect(noWait.autoRetry).toBe(false);
   });
 });

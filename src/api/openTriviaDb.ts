@@ -16,8 +16,10 @@ export const TOKEN_URL = 'https://opentdb.com/api_token.php';
 const REQUEST_TIMEOUT_MS = 10_000;
 /** 5 seconds from the docs, plus a small safety margin. */
 export const MIN_GAP_BETWEEN_REQUESTS_MS = 5_500;
-/** How long the player waits after the server says "too many requests". */
+/** How long the player waits after the server says "too many requests" (unless Retry-After asks for longer). */
 export const RATE_LIMIT_WAIT_MS = 5_000;
+/** Never make the player wait longer than this, even if Retry-After asks for more. */
+const MAX_RATE_LIMIT_WAIT_MS = 60_000;
 
 type FetchLike = (url: string, init?: { signal?: AbortSignal; headers?: Record<string, string> }) => Promise<Response>;
 
@@ -60,8 +62,21 @@ function readResponseCode(body: unknown): number | undefined {
   return undefined;
 }
 
-function rateLimitError(): QuestionLoadError {
-  return new QuestionLoadError('rate-limit', 'Open Trivia Database rate limit reached (code 5).', RATE_LIMIT_WAIT_MS);
+/**
+ * Reads a Retry-After header: either a number of seconds ("7") or a date.
+ * Returns milliseconds to wait, or null if the header is missing or unreadable.
+ */
+export function parseRetryAfter(value: string | null | undefined, now: number = Date.now()): number | null {
+  if (!value) return null;
+  const trimmed = value.trim();
+  if (/^\d+(\.\d+)?$/.test(trimmed)) return Math.round(parseFloat(trimmed) * 1000);
+  const date = Date.parse(trimmed);
+  return Number.isNaN(date) ? null : Math.max(0, date - now);
+}
+
+function rateLimitError(retryAfterMs: number | null = null): QuestionLoadError {
+  const waitMs = Math.min(MAX_RATE_LIMIT_WAIT_MS, Math.max(RATE_LIMIT_WAIT_MS, retryAfterMs ?? 0));
+  return new QuestionLoadError('rate-limit', 'Open Trivia Database rate limit reached (code 5).', waitMs);
 }
 
 /** One HTTP request with a timeout. Turns every kind of failure into a QuestionLoadError. */
@@ -97,7 +112,9 @@ async function fetchJson(url: string, fetchImpl: FetchLike, timeoutMs: number, s
     }
 
     // Open Trivia Database answers rate limits with HTTP 429 and response_code 5.
-    if (response.status === 429 || readResponseCode(body) === 5) throw rateLimitError();
+    if (response.status === 429 || readResponseCode(body) === 5) {
+      throw rateLimitError(parseRetryAfter(response.headers?.get?.('retry-after')));
+    }
     if (!response.ok) throw new QuestionLoadError('http', `The server answered with HTTP ${response.status}.`);
     if (body === null || typeof body !== 'object') throw new QuestionLoadError('malformed', 'The response was not valid JSON.');
     return body;
@@ -120,6 +137,8 @@ export function createOpenTriviaClient(options: OpenTriviaClientOptions = {}) {
   /** Kept in memory only, so it lasts until the app is fully closed. */
   let sessionToken: string | null = null;
   let lastQuestionsRequestAt = Number.NEGATIVE_INFINITY;
+  /** After a rate limit, no questions request is sent before this time. */
+  let blockedUntil = Number.NEGATIVE_INFINITY;
 
   /** Asks for a token. If that fails, the game still works without one. */
   async function tryGetToken(signal?: AbortSignal, resetToken?: string): Promise<string | null> {
@@ -138,13 +157,23 @@ export function createOpenTriviaClient(options: OpenTriviaClientOptions = {}) {
     }
   }
 
-  /** Requests one set of questions, waiting first if the last request was under 5 seconds ago. */
+  /**
+   * Requests one set of questions. Every questions request (first try or retry) goes through here,
+   * so they are always at least 5 seconds apart, and never sent during a rate-limit wait.
+   */
   async function requestQuestions(signal?: AbortSignal): Promise<unknown> {
-    const wait = lastQuestionsRequestAt + minGapMs - now();
+    const wait = Math.max(lastQuestionsRequestAt + minGapMs, blockedUntil) - now();
     if (wait > 0) await sleep(wait, signal);
     lastQuestionsRequestAt = now();
     const url = sessionToken ? `${QUESTIONS_URL}&token=${encodeURIComponent(sessionToken)}` : QUESTIONS_URL;
-    return fetchJson(url, fetchImpl, timeoutMs, signal);
+    try {
+      return await fetchJson(url, fetchImpl, timeoutMs, signal);
+    } catch (error) {
+      if (error instanceof QuestionLoadError && error.kind === 'rate-limit') {
+        blockedUntil = now() + error.retryAfterMs;
+      }
+      throw error;
+    }
   }
 
   /** Returns the raw `results` array for one new game. */
@@ -176,6 +205,7 @@ export function createOpenTriviaClient(options: OpenTriviaClientOptions = {}) {
         sessionToken = null; // Start a fresh session on the next attempt.
         throw new QuestionLoadError('token', `The session token could not be used (code ${code}).`);
       case 5:
+        blockedUntil = now() + RATE_LIMIT_WAIT_MS;
         throw rateLimitError();
       default:
         throw new QuestionLoadError('malformed', 'The response had an unknown response code.');

@@ -36,7 +36,7 @@ export function getFriendlyErrorMessage(error: unknown): string {
     case 'http':
       return 'The trivia server is having trouble right now. Please wait a moment, then tap Retry.';
     case 'rate-limit':
-      return 'Too many requests in a short time. The trivia server allows one every 5 seconds, shared by everyone on your Wi-Fi — please wait a few seconds, then tap Retry.';
+      return 'The trivia service is busy right now. It allows one request every 5 seconds, shared by everyone on the same Wi-Fi. Please wait for the countdown, then tap Retry.';
     case 'no-results':
       return 'The trivia server couldn’t provide 5 questions right now. Please tap Retry.';
     case 'token':

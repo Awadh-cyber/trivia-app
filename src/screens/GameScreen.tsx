@@ -8,7 +8,7 @@ import { QuestionCard } from '../components/QuestionCard';
 import { ResultsSummary } from '../components/ResultsSummary';
 import { ScoreDisplay } from '../components/ScoreDisplay';
 import { StatusMessage } from '../components/StatusMessage';
-import { MAX_AUTO_RETRIES, useQuiz } from '../hooks/useQuiz';
+import { useQuiz } from '../hooks/useQuiz';
 import { colors, MAX_CONTENT_WIDTH, spacing } from '../theme';
 
 /** The single game screen: loading, error, quiz and results all live here. */
@@ -21,19 +21,15 @@ export function GameScreen() {
     scrollRef.current?.scrollTo({ y: 0, animated: false });
   }, [quiz.questionNumber, quiz.phase]);
 
+  function getPlayAgainTitle(): string {
+    if (quiz.isLoading) return 'Loading new questions…';
+    if (quiz.errorMessage) return quiz.retryWaitSeconds > 0 ? `Retry in ${quiz.retryWaitSeconds}s` : 'Retry';
+    return quiz.playAgainWaitSeconds > 0 ? `Play again in ${quiz.playAgainWaitSeconds}s` : 'Play again';
+  }
+
   function renderContent() {
     if (quiz.phase === 'loading') {
       return <StatusMessage loading title="Getting fresh questions…" message="From Open Trivia Database" />;
-    }
-
-    if (quiz.isAutoRetrying) {
-      return (
-        <StatusMessage
-          emoji="⏳"
-          title={`Trying again in ${Math.max(quiz.retryWaitSeconds, 1)}…`}
-          message={`The trivia server is busy because lots of people on this Wi-Fi are playing. Please wait 5 seconds. (Try ${quiz.autoRetryAttempt} of ${MAX_AUTO_RETRIES})`}
-        />
-      );
     }
 
     if (quiz.phase === 'error') {
@@ -50,7 +46,16 @@ export function GameScreen() {
     }
 
     if (quiz.phase === 'finished') {
-      return <ResultsSummary score={quiz.score} total={quiz.totalQuestions} onPlayAgain={quiz.playAgain} />;
+      return (
+        <ResultsSummary
+          score={quiz.score}
+          total={quiz.totalQuestions}
+          onPlayAgain={quiz.playAgain}
+          playAgainTitle={getPlayAgainTitle()}
+          playAgainDisabled={quiz.isLoading || quiz.playAgainWaitSeconds > 0 || quiz.retryWaitSeconds > 0}
+          notice={quiz.errorMessage}
+        />
+      );
     }
 
     if (!quiz.question) {

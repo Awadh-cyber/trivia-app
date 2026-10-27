@@ -1,13 +1,15 @@
-import { createOpenTriviaClient, QUESTIONS_URL } from '../src/api/openTriviaDb';
+import { createOpenTriviaClient, parseRetryAfter, QUESTIONS_URL } from '../src/api/openTriviaDb';
 import { QuestionLoadError } from '../src/data/questionErrors';
 
-type Reply = { status?: number; body?: unknown; throws?: boolean; badJson?: boolean; hang?: boolean };
+type Reply = { status?: number; body?: unknown; throws?: boolean; badJson?: boolean; hang?: boolean; retryAfter?: string };
 
 /** A fake fetch that answers token and question URLs from two scripted queues. */
 function fakeFetch(tokenReplies: Reply[], questionReplies: Reply[]) {
   const calls: string[] = [];
+  const callTimes: number[] = [];
   const fetchImpl = jest.fn((url: string, init?: { signal?: AbortSignal }) => {
     calls.push(url);
+    if (url.includes('api.php')) callTimes.push(Date.now());
     const queue = url.includes('api_token.php') ? tokenReplies : questionReplies;
     const reply = queue.shift() ?? { body: { response_code: 0, results: [] } };
     if (reply.throws) return Promise.reject(new TypeError('Network request failed'));
@@ -20,10 +22,11 @@ function fakeFetch(tokenReplies: Reply[], questionReplies: Reply[]) {
     return Promise.resolve({
       ok: status >= 200 && status < 300,
       status,
+      headers: { get: (name: string) => (name.toLowerCase() === 'retry-after' ? reply.retryAfter ?? null : null) },
       json: () => (reply.badJson ? Promise.reject(new SyntaxError('bad json')) : Promise.resolve(reply.body)),
     } as Response);
   });
-  return { fetchImpl, calls };
+  return { fetchImpl, calls, callTimes };
 }
 
 const TOKEN_OK = { body: { response_code: 0, response_message: 'Token Generated Successfully!', token: 'tok1' } };
@@ -152,5 +155,58 @@ describe('Open Trivia Database client', () => {
     const started = Date.now();
     await api.fetchQuestions();
     expect(Date.now() - started).toBeGreaterThanOrEqual(25);
+  });
+
+  it('keeps the token-retry request at least the minimum gap after the first one', async () => {
+    const { fetchImpl, callTimes } = fakeFetch(
+      [TOKEN_OK, { body: { response_code: 0, token: 'tok2' } }],
+      [{ body: { response_code: 3, results: [] } }, QUESTIONS_OK],
+    );
+    await createOpenTriviaClient({ fetchImpl, minGapMs: 60 }).fetchQuestions();
+    expect(callTimes).toHaveLength(2);
+    expect(callTimes[1] - callTimes[0]).toBeGreaterThanOrEqual(55);
+  });
+
+  it('uses Retry-After when the server sends one (but at least 5 s, at most 60 s)', async () => {
+    const limited = (retryAfter: string) => ({ status: 429, body: { response_code: 5, result: [] }, retryAfter });
+    const waitFor = async (retryAfter: string) => {
+      const { fetchImpl } = fakeFetch([TOKEN_OK], [limited(retryAfter)]);
+      try {
+        await client(fetchImpl).fetchQuestions();
+      } catch (error) {
+        return (error as QuestionLoadError).retryAfterMs;
+      }
+    };
+    expect(await waitFor('12')).toBe(12_000);
+    expect(await waitFor('2')).toBe(5_000);
+    expect(await waitFor('600')).toBe(60_000);
+    expect(await waitFor('soon')).toBe(5_000);
+  });
+
+  it('does not send another questions request until the rate-limit wait is over', async () => {
+    let clock = 0;
+    const { fetchImpl, callTimes } = fakeFetch(
+      [TOKEN_OK],
+      [{ status: 429, body: { response_code: 5, result: [] }, retryAfter: '0.05' }, QUESTIONS_OK],
+    );
+    const api = createOpenTriviaClient({ fetchImpl, minGapMs: 0, now: () => clock });
+    await expect(api.fetchQuestions()).rejects.toMatchObject({ kind: 'rate-limit' });
+    // retryAfterMs is at least 5000, so with the clock still at 0 the next request must wait.
+    clock = 4_990;
+    const started = Date.now();
+    await api.fetchQuestions();
+    expect(Date.now() - started).toBeGreaterThanOrEqual(5);
+    expect(callTimes).toHaveLength(2);
+  });
+});
+
+describe('parseRetryAfter', () => {
+  it('reads seconds and dates', () => {
+    expect(parseRetryAfter('7')).toBe(7000);
+    expect(parseRetryAfter(' 1.5 ')).toBe(1500);
+    expect(parseRetryAfter(new Date(10_000).toUTCString(), 4_000)).toBe(6000);
+    expect(parseRetryAfter(null)).toBeNull();
+    expect(parseRetryAfter('')).toBeNull();
+    expect(parseRetryAfter('later')).toBeNull();
   });
 });

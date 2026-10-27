@@ -2,34 +2,40 @@ import type { AnswerRecord, Question } from '../types';
 
 export type QuizPhase = 'loading' | 'error' | 'playing' | 'finished';
 
+/** Play again stays disabled this long after the results appear. */
+export const PLAY_AGAIN_COOLDOWN_MS = 5_000;
+
 export interface QuizState {
   phase: QuizPhase;
   questions: Question[];
   currentIndex: number;
   /** One record per answered question, in order. Score is counted from these. */
   answers: AnswerRecord[];
+  /** True while a request for a new game is in progress. */
+  isLoading: boolean;
   errorMessage: string | null;
   /** When Retry may be tapped again (used after a rate limit), as a Date.now() time. */
   retryAvailableAt: number | null;
-  /** True while the app is counting down to try again by itself. */
-  autoRetry: boolean;
+  /** When Play again becomes tappable on the results screen, as a Date.now() time. */
+  playAgainAvailableAt: number | null;
 }
 
 export type QuizAction =
   | { type: 'LOAD_START' }
   | { type: 'LOAD_SUCCESS'; questions: Question[] }
-  | { type: 'LOAD_FAILURE'; message: string; retryAvailableAt?: number | null; autoRetry?: boolean }
+  | { type: 'LOAD_FAILURE'; message: string; retryAvailableAt?: number | null }
   | { type: 'ANSWER'; choiceIndex: number }
-  | { type: 'NEXT' };
+  | { type: 'NEXT'; now: number };
 
 export const initialQuizState: QuizState = {
   phase: 'loading',
   questions: [],
   currentIndex: 0,
   answers: [],
+  isLoading: false,
   errorMessage: null,
   retryAvailableAt: null,
-  autoRetry: false,
+  playAgainAvailableAt: null,
 };
 
 /** True once the player has answered the question currently on screen. */
@@ -60,24 +66,32 @@ export function isLastQuestion(state: QuizState): boolean {
  */
 export function quizReducer(state: QuizState, action: QuizAction): QuizState {
   switch (action.type) {
-    // Starting a new game (first launch, Play again or Retry) wipes all progress.
     case 'LOAD_START':
-      return { ...initialQuizState };
+      // Only one request at a time.
+      if (state.isLoading) return state;
+      // From the results screen: keep the results visible until the new game has loaded.
+      if (state.phase === 'finished') {
+        return { ...state, isLoading: true, errorMessage: null, retryAvailableAt: null };
+      }
+      return { ...initialQuizState, isLoading: true };
 
     // Results only count while we are waiting for them.
     case 'LOAD_SUCCESS':
-      if (state.phase !== 'loading') return state;
+      if (!state.isLoading) return state;
+      // The new game starts here, so this is where all progress is reset.
       return { ...initialQuizState, phase: 'playing', questions: action.questions };
 
-    case 'LOAD_FAILURE':
-      if (state.phase !== 'loading') return state;
-      return {
-        ...initialQuizState,
-        phase: 'error',
+    case 'LOAD_FAILURE': {
+      if (!state.isLoading) return state;
+      const failure = {
+        isLoading: false,
         errorMessage: action.message,
         retryAvailableAt: action.retryAvailableAt ?? null,
-        autoRetry: action.autoRetry === true && action.retryAvailableAt != null,
       };
+      // Stay on the results screen and show the problem there.
+      if (state.phase === 'finished') return { ...state, ...failure };
+      return { ...initialQuizState, ...failure, phase: 'error' };
+    }
 
     case 'ANSWER': {
       const question = getCurrentQuestion(state);
@@ -104,7 +118,7 @@ export function quizReducer(state: QuizState, action: QuizAction): QuizState {
         return state;
       }
       if (isLastQuestion(state)) {
-        return { ...state, phase: 'finished' };
+        return { ...state, phase: 'finished', playAgainAvailableAt: action.now + PLAY_AGAIN_COOLDOWN_MS };
       }
       return { ...state, currentIndex: state.currentIndex + 1 };
     }

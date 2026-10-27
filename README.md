@@ -28,15 +28,16 @@ This runs the TypeScript check and the Jest tests in `__tests__/`. The API tests
 
 ## How the Open Trivia Database connection works
 
-- **One request per game.** The first game loads when the app opens, and Play again or Retry loads a new one. Double taps are ignored while a game is loading.
+- **One request per game.** The first game loads when the app opens. After the results appear, **Play again** stays disabled for 5 seconds ("Play again in 5s" … "1s"). Then a new game loads only when you tap it. Double taps are ignored, and the results stay on screen until the new game has loaded.
 - **Session token.** The app asks for a session token once, so the server avoids sending questions you've already had. The token is kept in memory only, so closing the app fully starts a new session. Tokens expire after 6 hours of inactivity.
   - Code 3 (token not found): the app gets a new token and tries once more.
   - Code 4 (all questions used): the app resets the token and tries once more.
   - If that retry also fails, the app shows an error. It never keeps retrying on its own.
-- **Rate limit.** The server allows one request every 5 seconds per internet address, and everyone on the same Wi-Fi shares that address.
-  - The app waits if your last request was under 5 seconds ago.
-  - If the server still says "too many requests" (HTTP 429 / code 5), the app shows a 5-second countdown ("Trying again in 5…") and then tries again by itself.
-  - It does this at most 3 times. After that it shows an error with a Retry button, so it never retries forever.
+- **Rate limit.** The server allows one request every 5 seconds per internet address, and everyone on the same Wi-Fi shares that address, so other people can still trigger it.
+  - Every questions request, including token retries, waits until at least 5.5 seconds after the previous one.
+  - If the server still says "too many requests" (HTTP 429 / code 5), the app shows a friendly "busy" message and a "Retry in Ns" countdown (5 seconds, or longer if the server sends `Retry-After`, up to 60 seconds).
+  - Retry turns on after the countdown, but the app never retries by itself.
+  - Session-token requests (`api_token.php`) did not use up the limit in testing, so they are not delayed.
 - **Errors.** No internet, a timeout after 10 seconds, server errors, broken data, or fewer than 5 usable questions all show a friendly message with a Retry button. The app never falls back to old fixed questions.
 - **Limits.** Repeats are still possible: in the first game after opening the app (if the token request fails), after the token is reset, or in a new app session.
 

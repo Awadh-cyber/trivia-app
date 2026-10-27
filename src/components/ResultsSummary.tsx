@@ -7,6 +7,11 @@ interface ResultsSummaryProps {
   score: number;
   total: number;
   onPlayAgain: () => void;
+  /** Button text, e.g. "Play again in 3s", "Loading new questions…", "Retry". */
+  playAgainTitle?: string;
+  playAgainDisabled?: boolean;
+  /** A problem loading the next game, shown above the button. */
+  notice?: string | null;
 }
 
 function getMessage(score: number, total: number): { emoji: string; text: string } {
@@ -17,7 +22,14 @@ function getMessage(score: number, total: number): { emoji: string; text: string
 }
 
 /** Final screen: the score out of the total and a Play again button. */
-export function ResultsSummary({ score, total, onPlayAgain }: ResultsSummaryProps) {
+export function ResultsSummary({
+  score,
+  total,
+  onPlayAgain,
+  playAgainTitle = 'Play again',
+  playAgainDisabled = false,
+  notice,
+}: ResultsSummaryProps) {
   const message = getMessage(score, total);
 
   return (
@@ -38,8 +50,15 @@ export function ResultsSummary({ score, total, onPlayAgain }: ResultsSummaryProp
 
       <Text style={styles.message}>{message.text}</Text>
 
+      {notice && (
+        <View style={styles.notice} accessibilityLiveRegion="polite">
+          <Text style={styles.noticeTitle}>⏳ Couldn’t start a new game yet</Text>
+          <Text style={styles.noticeText}>{notice}</Text>
+        </View>
+      )}
+
       <View style={styles.button}>
-        <PrimaryButton title="Play again" onPress={onPlayAgain} />
+        <PrimaryButton title={playAgainTitle} onPress={onPlayAgain} disabled={playAgainDisabled} />
       </View>
     </View>
   );
@@ -85,6 +104,25 @@ const styles = StyleSheet.create({
     fontSize: 19,
     lineHeight: 26,
     textAlign: 'center',
+  },
+  notice: {
+    alignSelf: 'stretch',
+    borderRadius: radius.md,
+    borderWidth: 2,
+    borderColor: colors.turquoise,
+    backgroundColor: colors.card,
+    padding: spacing.md,
+    gap: spacing.xs,
+  },
+  noticeTitle: {
+    color: colors.text,
+    fontSize: 17,
+    fontWeight: '800',
+  },
+  noticeText: {
+    color: colors.text,
+    fontSize: 16,
+    lineHeight: 22,
   },
   button: {
     alignSelf: 'stretch',

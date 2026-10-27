@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
+import { useCallback, useEffect, useReducer, useRef } from 'react';
 
 import { getFriendlyErrorMessage, QuestionLoadError } from '../data/questionErrors';
 import { loadQuestions } from '../data/questionSource';
@@ -10,9 +10,7 @@ import {
   isLastQuestion,
   quizReducer,
 } from '../logic/quizReducer';
-
-/** After "too many requests", the app waits 5 seconds and tries again by itself, at most this many times. */
-export const MAX_AUTO_RETRIES = 3;
+import { useSecondsUntil } from './useSecondsUntil';
 
 /** Connects the question source and the game rules to the screen. */
 export function useQuiz() {
@@ -21,15 +19,12 @@ export function useQuiz() {
   // Only the newest request may update the game; older ones are cancelled and ignored.
   const latestRequestId = useRef(0);
   const activeController = useRef<AbortController | null>(null);
-  // Blocks double taps on Play again / Retry from starting two requests.
+  // Blocks double taps from starting two requests before the screen updates.
   const isLoading = useRef(false);
-  // Counts automatic tries since the player last tapped something.
-  const autoRetriesUsed = useRef(0);
 
-  const startNewGame = useCallback(async (isAutoRetry = false) => {
+  const startNewGame = useCallback(async () => {
     if (isLoading.current) return;
     isLoading.current = true;
-    if (!isAutoRetry) autoRetriesUsed.current = 0;
 
     activeController.current?.abort();
     const controller = new AbortController();
@@ -40,18 +35,14 @@ export function useQuiz() {
     try {
       const questions = await loadQuestions(controller.signal);
       if (requestId !== latestRequestId.current) return;
-      autoRetriesUsed.current = 0;
       dispatch({ type: 'LOAD_SUCCESS', questions });
     } catch (error) {
       if (requestId !== latestRequestId.current || controller.signal.aborted) return;
       const waitMs = error instanceof QuestionLoadError ? error.retryAfterMs : 0;
-      const autoRetry = waitMs > 0 && autoRetriesUsed.current < MAX_AUTO_RETRIES;
-      if (autoRetry) autoRetriesUsed.current++;
       dispatch({
         type: 'LOAD_FAILURE',
         message: getFriendlyErrorMessage(error),
         retryAvailableAt: waitMs > 0 ? Date.now() + waitMs : null,
-        autoRetry,
       });
     } finally {
       if (requestId === latestRequestId.current) {
@@ -63,7 +54,7 @@ export function useQuiz() {
 
   // Load the first game once, and cancel any pending request if the screen goes away.
   useEffect(() => {
-    startNewGame(false);
+    startNewGame();
     return () => {
       latestRequestId.current++;
       activeController.current?.abort();
@@ -72,38 +63,23 @@ export function useQuiz() {
     };
   }, [startNewGame]);
 
-  // After a rate limit, count down until Retry is allowed again.
-  const [now, setNow] = useState(() => Date.now());
-  const retryAvailableAt = state.retryAvailableAt;
-  useEffect(() => {
-    if (retryAvailableAt === null) return;
-    setNow(Date.now());
-    const timer = setInterval(() => {
-      const current = Date.now();
-      setNow(current);
-      if (current >= retryAvailableAt) clearInterval(timer);
-    }, 250);
-    return () => clearInterval(timer);
-  }, [retryAvailableAt]);
-  const retryWaitSeconds = retryAvailableAt === null ? 0 : Math.max(0, Math.ceil((retryAvailableAt - now) / 1000));
+  const playAgainWaitSeconds = useSecondsUntil(state.phase === 'finished' ? state.playAgainAvailableAt : null);
+  const retryWaitSeconds = useSecondsUntil(state.retryAvailableAt);
 
-  // When the 5-second countdown ends, try again by itself (only while autoRetry is on).
-  const shouldAutoRetry = state.phase === 'error' && state.autoRetry && retryWaitSeconds === 0;
-  useEffect(() => {
-    if (shouldAutoRetry) startNewGame(true);
-  }, [shouldAutoRetry, startNewGame]);
-
-  const retry = useCallback(() => {
-    if (retryAvailableAt !== null && Date.now() < retryAvailableAt) return;
-    startNewGame(false);
-  }, [retryAvailableAt, startNewGame]);
+  /** Starts a new game only when nothing is loading and every countdown has finished. */
+  const requestNewGame = useCallback(() => {
+    const now = Date.now();
+    if (state.retryAvailableAt !== null && now < state.retryAvailableAt) return;
+    if (state.phase === 'finished' && state.playAgainAvailableAt !== null && now < state.playAgainAvailableAt) return;
+    startNewGame();
+  }, [state.phase, state.playAgainAvailableAt, state.retryAvailableAt, startNewGame]);
 
   return {
     phase: state.phase,
+    isLoading: state.isLoading,
     errorMessage: state.errorMessage,
     retryWaitSeconds,
-    isAutoRetrying: state.phase === 'error' && state.autoRetry,
-    autoRetryAttempt: autoRetriesUsed.current,
+    playAgainWaitSeconds,
     question: getCurrentQuestion(state),
     currentAnswer: getCurrentAnswer(state),
     questionNumber: state.currentIndex + 1,
@@ -111,8 +87,8 @@ export function useQuiz() {
     score: getScore(state),
     isLastQuestion: isLastQuestion(state),
     answer: (choiceIndex: number) => dispatch({ type: 'ANSWER', choiceIndex }),
-    next: () => dispatch({ type: 'NEXT' }),
-    playAgain: () => startNewGame(false),
-    retry,
+    next: () => dispatch({ type: 'NEXT', now: Date.now() }),
+    playAgain: requestNewGame,
+    retry: requestNewGame,
   };
 }
