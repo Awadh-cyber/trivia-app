@@ -5,9 +5,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { PrimaryButton } from '../components/PrimaryButton';
 import { ProgressIndicator } from '../components/ProgressIndicator';
 import { QuestionCard } from '../components/QuestionCard';
+import { EmptyState, ErrorState, LoadingState } from '../components/QuizStates';
 import { ResultsSummary } from '../components/ResultsSummary';
 import { ScoreDisplay } from '../components/ScoreDisplay';
-import { StatusMessage } from '../components/StatusMessage';
 import { useQuiz } from '../hooks/useQuiz';
 import { colors, MAX_CONTENT_WIDTH, spacing } from '../theme';
 
@@ -29,18 +29,26 @@ export function GameScreen() {
 
   function renderContent() {
     if (quiz.phase === 'loading') {
-      return <StatusMessage loading title="Getting fresh questions…" message="From Open Trivia Database" />;
+      return <LoadingState />;
+    }
+
+    if (quiz.phase === 'error' && quiz.isEmptyResult) {
+      return (
+        <EmptyState
+          onTryAgain={quiz.retry}
+          tryAgainTitle={quiz.retryWaitSeconds > 0 ? `Try again in ${quiz.retryWaitSeconds}s` : 'Try again'}
+          tryAgainDisabled={quiz.retryWaitSeconds > 0}
+        />
+      );
     }
 
     if (quiz.phase === 'error') {
       return (
-        <StatusMessage
-          emoji="😕"
-          title="We couldn’t load the questions"
+        <ErrorState
           message={quiz.errorMessage ?? 'Something went wrong while loading questions.'}
-          actionTitle={quiz.retryWaitSeconds > 0 ? `Retry in ${quiz.retryWaitSeconds}s` : 'Retry'}
-          actionDisabled={quiz.retryWaitSeconds > 0}
-          onAction={quiz.retry}
+          onRetry={quiz.retry}
+          retryTitle={quiz.retryWaitSeconds > 0 ? `Retry in ${quiz.retryWaitSeconds}s` : 'Retry'}
+          retryDisabled={quiz.retryWaitSeconds > 0}
         />
       );
     }
@@ -59,15 +67,7 @@ export function GameScreen() {
     }
 
     if (!quiz.question) {
-      return (
-        <StatusMessage
-          emoji="📭"
-          title="No questions to show"
-          message="There are no questions available right now."
-          actionTitle="Retry"
-          onAction={quiz.retry}
-        />
-      );
+      return <EmptyState onTryAgain={quiz.retry} />;
     }
 
     return (

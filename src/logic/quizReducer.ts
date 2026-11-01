@@ -14,6 +14,8 @@ export interface QuizState {
   /** True while a request for a new game is in progress. */
   isLoading: boolean;
   errorMessage: string | null;
+  /** True when loading failed because the server had no questions (shown as the Empty state). */
+  isEmptyResult: boolean;
   /** When Retry may be tapped again (used after a rate limit), as a Date.now() time. */
   retryAvailableAt: number | null;
   /** When Play again becomes tappable on the results screen, as a Date.now() time. */
@@ -23,7 +25,7 @@ export interface QuizState {
 export type QuizAction =
   | { type: 'LOAD_START' }
   | { type: 'LOAD_SUCCESS'; questions: Question[] }
-  | { type: 'LOAD_FAILURE'; message: string; retryAvailableAt?: number | null }
+  | { type: 'LOAD_FAILURE'; message: string; retryAvailableAt?: number | null; isEmpty?: boolean }
   | { type: 'ANSWER'; choiceIndex: number }
   | { type: 'NEXT'; now: number };
 
@@ -34,6 +36,7 @@ export const initialQuizState: QuizState = {
   answers: [],
   isLoading: false,
   errorMessage: null,
+  isEmptyResult: false,
   retryAvailableAt: null,
   playAgainAvailableAt: null,
 };
@@ -71,7 +74,7 @@ export function quizReducer(state: QuizState, action: QuizAction): QuizState {
       if (state.isLoading) return state;
       // From the results screen: keep the results visible until the new game has loaded.
       if (state.phase === 'finished') {
-        return { ...state, isLoading: true, errorMessage: null, retryAvailableAt: null };
+        return { ...state, isLoading: true, errorMessage: null, isEmptyResult: false, retryAvailableAt: null };
       }
       return { ...initialQuizState, isLoading: true };
 
@@ -86,6 +89,7 @@ export function quizReducer(state: QuizState, action: QuizAction): QuizState {
       const failure = {
         isLoading: false,
         errorMessage: action.message,
+        isEmptyResult: action.isEmpty === true,
         retryAvailableAt: action.retryAvailableAt ?? null,
       };
       // Stay on the results screen and show the problem there.

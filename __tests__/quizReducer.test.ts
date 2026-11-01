@@ -200,4 +200,15 @@ describe('quizReducer', () => {
     expect(failed.retryAvailableAt).toBe(12345);
     expect(run([{ type: 'LOAD_START' }], failed).retryAvailableAt).toBeNull();
   });
+
+  it('marks an empty server result so the Empty state is shown instead of the Error state', () => {
+    const empty = run([{ type: 'LOAD_START' }, { type: 'LOAD_FAILURE', message: 'none', isEmpty: true }]);
+    expect(empty.phase).toBe('error');
+    expect(empty.isEmptyResult).toBe(true);
+
+    const error = run([{ type: 'LOAD_START' }, { type: 'LOAD_FAILURE', message: 'offline' }]);
+    expect(error.isEmptyResult).toBe(false);
+
+    expect(run([{ type: 'LOAD_START' }], empty).isEmptyResult).toBe(false);
+  });
 });

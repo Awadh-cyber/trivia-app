@@ -39,10 +39,12 @@ export function useQuiz() {
     } catch (error) {
       if (requestId !== latestRequestId.current || controller.signal.aborted) return;
       const waitMs = error instanceof QuestionLoadError ? error.retryAfterMs : 0;
+      const isEmpty = error instanceof QuestionLoadError && (error.kind === 'empty' || error.kind === 'no-results');
       dispatch({
         type: 'LOAD_FAILURE',
         message: getFriendlyErrorMessage(error),
         retryAvailableAt: waitMs > 0 ? Date.now() + waitMs : null,
+        isEmpty,
       });
     } finally {
       if (requestId === latestRequestId.current) {
@@ -78,6 +80,7 @@ export function useQuiz() {
     phase: state.phase,
     isLoading: state.isLoading,
     errorMessage: state.errorMessage,
+    isEmptyResult: state.isEmptyResult,
     retryWaitSeconds,
     playAgainWaitSeconds,
     question: getCurrentQuestion(state),

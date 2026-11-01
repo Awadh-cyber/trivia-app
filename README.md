@@ -51,6 +51,6 @@ This runs the TypeScript check and the Jest tests in `__tests__/`. The API tests
 | `src/logic/` | Game rules: answering, scoring, moving to the next question, and resetting for a new game (`quizReducer.ts`). |
 | `src/hooks/` | `useQuiz` loads each game, cancels outdated requests, and connects the game rules to the screen. |
 | `test-fixtures/` | Fixed sample questions used only by tests. |
-| `src/components/` | Reusable building blocks: `QuestionCard`, `AnswerButton`, `ScoreDisplay`, `ProgressIndicator`, `ResultsSummary`, `PrimaryButton`, `StatusMessage`. |
+| `src/components/` | Reusable building blocks: `QuestionCard`, `AnswerButton`, `ScoreDisplay`, `ProgressIndicator`, `ResultsSummary`, `PrimaryButton`, `StatusMessage`, and `QuizStates` (`LoadingState`, `ErrorState`, `EmptyState`). |
 | `src/screens/` | `GameScreen`, the single game screen. |
 | `src/theme.ts` | Colors, spacing and sizes. |
