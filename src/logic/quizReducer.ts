@@ -1,6 +1,7 @@
 import type { AnswerRecord, Question } from '../types';
 
-export type QuizPhase = 'loading' | 'error' | 'playing' | 'finished';
+/** 'idle' = waiting for the player to start (used by AI Quiz before a topic is entered). */
+export type QuizPhase = 'idle' | 'loading' | 'error' | 'playing' | 'finished';
 
 /** Play again stays disabled this long after the results appear. */
 export const PLAY_AGAIN_COOLDOWN_MS = 5_000;
@@ -14,6 +15,8 @@ export interface QuizState {
   /** True while a request for a new game is in progress. */
   isLoading: boolean;
   errorMessage: string | null;
+  /** Small technical detail for the error, e.g. "HTTP 429". */
+  errorDetail: string | null;
   /** True when loading failed because the server had no questions (shown as the Empty state). */
   isEmptyResult: boolean;
   /** When Retry may be tapped again (used after a rate limit), as a Date.now() time. */
@@ -25,9 +28,16 @@ export interface QuizState {
 export type QuizAction =
   | { type: 'LOAD_START' }
   | { type: 'LOAD_SUCCESS'; questions: Question[] }
-  | { type: 'LOAD_FAILURE'; message: string; retryAvailableAt?: number | null; isEmpty?: boolean }
+  | {
+      type: 'LOAD_FAILURE';
+      message: string;
+      detail?: string | null;
+      retryAvailableAt?: number | null;
+      isEmpty?: boolean;
+    }
   | { type: 'ANSWER'; choiceIndex: number }
-  | { type: 'NEXT'; now: number };
+  | { type: 'NEXT'; now: number }
+  | { type: 'RESET' };
 
 export const initialQuizState: QuizState = {
   phase: 'loading',
@@ -36,6 +46,7 @@ export const initialQuizState: QuizState = {
   answers: [],
   isLoading: false,
   errorMessage: null,
+  errorDetail: null,
   isEmptyResult: false,
   retryAvailableAt: null,
   playAgainAvailableAt: null,
@@ -74,7 +85,14 @@ export function quizReducer(state: QuizState, action: QuizAction): QuizState {
       if (state.isLoading) return state;
       // From the results screen: keep the results visible until the new game has loaded.
       if (state.phase === 'finished') {
-        return { ...state, isLoading: true, errorMessage: null, isEmptyResult: false, retryAvailableAt: null };
+        return {
+          ...state,
+          isLoading: true,
+          errorMessage: null,
+          errorDetail: null,
+          isEmptyResult: false,
+          retryAvailableAt: null,
+        };
       }
       return { ...initialQuizState, isLoading: true };
 
@@ -89,6 +107,7 @@ export function quizReducer(state: QuizState, action: QuizAction): QuizState {
       const failure = {
         isLoading: false,
         errorMessage: action.message,
+        errorDetail: action.detail ?? null,
         isEmptyResult: action.isEmpty === true,
         retryAvailableAt: action.retryAvailableAt ?? null,
       };
@@ -126,6 +145,11 @@ export function quizReducer(state: QuizState, action: QuizAction): QuizState {
       }
       return { ...state, currentIndex: state.currentIndex + 1 };
     }
+
+    // Back to the start screen (AI Quiz "New topic"). Not allowed while loading.
+    case 'RESET':
+      if (state.isLoading) return state;
+      return { ...initialQuizState, phase: 'idle' };
 
     default:
       return state;

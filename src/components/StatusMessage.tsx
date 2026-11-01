@@ -7,6 +7,8 @@ interface StatusMessageProps {
   emoji?: string;
   title: string;
   message?: string;
+  /** Small technical note, e.g. "HTTP 429". */
+  detail?: string | null;
   loading?: boolean;
   actionTitle?: string;
   onAction?: () => void;
@@ -18,6 +20,7 @@ export function StatusMessage({
   emoji,
   title,
   message,
+  detail,
   loading = false,
   actionTitle,
   onAction,
@@ -35,6 +38,7 @@ export function StatusMessage({
         {title}
       </Text>
       {message && <Text style={styles.message}>{message}</Text>}
+      {detail && <Text style={styles.detail}>{detail}</Text>}
       {actionTitle && onAction && (
         <View style={styles.button}>
           <PrimaryButton title={actionTitle} onPress={onAction} disabled={actionDisabled} />
@@ -65,6 +69,11 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
     fontSize: 17,
     lineHeight: 24,
+    textAlign: 'center',
+  },
+  detail: {
+    color: colors.textMuted,
+    fontSize: 13,
     textAlign: 'center',
   },
   button: {

@@ -7,19 +7,23 @@ export type QuestionErrorKind =
   | 'token' // the session token kept failing (codes 3 / 4)
   | 'malformed' // the response was not in the expected shape
   | 'empty' // no questions at all
-  | 'invalid'; // a question is broken (wrong number of choices, duplicates, ...)
+  | 'invalid' // a question is broken (wrong number of choices, duplicates, ...)
+  | 'config'; // the app is missing a setting (e.g. the AI key or model)
 
 /** Thrown when questions can't be loaded, so the screen can show a helpful message. */
 export class QuestionLoadError extends Error {
   kind: QuestionErrorKind;
   /** How long to wait before trying again (only for rate limits). */
   retryAfterMs: number;
+  /** The HTTP status code, when the server sent one. */
+  status: number | null;
 
-  constructor(kind: QuestionErrorKind, message: string, retryAfterMs = 0) {
+  constructor(kind: QuestionErrorKind, message: string, retryAfterMs = 0, status: number | null = null) {
     super(message);
     this.name = 'QuestionLoadError';
     this.kind = kind;
     this.retryAfterMs = retryAfterMs;
+    this.status = status;
   }
 }
 
@@ -45,5 +49,7 @@ export function getFriendlyErrorMessage(error: unknown): string {
     case 'empty':
     case 'invalid':
       return 'We received questions we couldn’t use. Please tap Retry for a new set.';
+    case 'config':
+      return 'This app is missing a setting it needs to load questions.';
   }
 }

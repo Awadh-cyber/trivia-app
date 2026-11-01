@@ -12,6 +12,12 @@ interface ResultsSummaryProps {
   playAgainDisabled?: boolean;
   /** A problem loading the next game, shown above the button. */
   notice?: string | null;
+  /** Small technical note for the problem, e.g. "HTTP 429". */
+  noticeDetail?: string | null;
+  /** Optional second button, e.g. "New topic". */
+  secondaryTitle?: string;
+  onSecondary?: () => void;
+  secondaryDisabled?: boolean;
 }
 
 function getMessage(score: number, total: number): { emoji: string; text: string } {
@@ -29,6 +35,10 @@ export function ResultsSummary({
   playAgainTitle = 'Play again',
   playAgainDisabled = false,
   notice,
+  noticeDetail,
+  secondaryTitle,
+  onSecondary,
+  secondaryDisabled = false,
 }: ResultsSummaryProps) {
   const message = getMessage(score, total);
 
@@ -54,12 +64,18 @@ export function ResultsSummary({
         <View style={styles.notice} accessibilityLiveRegion="polite">
           <Text style={styles.noticeTitle}>⏳ Couldn’t start a new game yet</Text>
           <Text style={styles.noticeText}>{notice}</Text>
+          {noticeDetail && <Text style={styles.noticeDetail}>{noticeDetail}</Text>}
         </View>
       )}
 
       <View style={styles.button}>
         <PrimaryButton title={playAgainTitle} onPress={onPlayAgain} disabled={playAgainDisabled} />
       </View>
+      {secondaryTitle && onSecondary && (
+        <View style={styles.button}>
+          <PrimaryButton title={secondaryTitle} onPress={onSecondary} disabled={secondaryDisabled} variant="secondary" />
+        </View>
+      )}
     </View>
   );
 }
@@ -123,6 +139,10 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontSize: 16,
     lineHeight: 22,
+  },
+  noticeDetail: {
+    color: colors.textMuted,
+    fontSize: 13,
   },
   button: {
     alignSelf: 'stretch',

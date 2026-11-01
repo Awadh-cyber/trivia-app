@@ -10,11 +10,36 @@ import {
   isLastQuestion,
   quizReducer,
 } from '../logic/quizReducer';
+import type { Question } from '../types';
 import { useSecondsUntil } from './useSecondsUntil';
 
-/** Connects the question source and the game rules to the screen. */
-export function useQuiz() {
-  const [state, dispatch] = useReducer(quizReducer, initialQuizState);
+export type QuestionLoader = (signal: AbortSignal) => Promise<Question[]>;
+
+export interface UseQuizOptions {
+  /** Where each new game's questions come from. Defaults to Open Trivia Database. */
+  loader?: QuestionLoader;
+  /** Load the first game as soon as the screen opens (true) or wait for start() (false). */
+  autoStart?: boolean;
+  /** Turns an error into a friendly sentence for the player. */
+  describeError?: (error: unknown) => string;
+}
+
+/** Connects a question source and the game rules to the screen. */
+export function useQuiz({
+  loader = loadQuestions,
+  autoStart = true,
+  describeError = getFriendlyErrorMessage,
+}: UseQuizOptions = {}) {
+  const [state, dispatch] = useReducer(
+    quizReducer,
+    autoStart ? initialQuizState : { ...initialQuizState, phase: 'idle' as const },
+  );
+
+  // Always use the newest loader / message function without restarting anything.
+  const loaderRef = useRef(loader);
+  loaderRef.current = loader;
+  const describeErrorRef = useRef(describeError);
+  describeErrorRef.current = describeError;
 
   // Only the newest request may update the game; older ones are cancelled and ignored.
   const latestRequestId = useRef(0);
@@ -33,18 +58,19 @@ export function useQuiz() {
 
     dispatch({ type: 'LOAD_START' });
     try {
-      const questions = await loadQuestions(controller.signal);
+      const questions = await loaderRef.current(controller.signal);
       if (requestId !== latestRequestId.current) return;
       dispatch({ type: 'LOAD_SUCCESS', questions });
     } catch (error) {
       if (requestId !== latestRequestId.current || controller.signal.aborted) return;
-      const waitMs = error instanceof QuestionLoadError ? error.retryAfterMs : 0;
-      const isEmpty = error instanceof QuestionLoadError && (error.kind === 'empty' || error.kind === 'no-results');
+      const loadError = error instanceof QuestionLoadError ? error : null;
+      const waitMs = loadError?.retryAfterMs ?? 0;
       dispatch({
         type: 'LOAD_FAILURE',
-        message: getFriendlyErrorMessage(error),
+        message: describeErrorRef.current(error),
+        detail: loadError?.status ? `HTTP ${loadError.status}` : null,
         retryAvailableAt: waitMs > 0 ? Date.now() + waitMs : null,
-        isEmpty,
+        isEmpty: loadError !== null && (loadError.kind === 'empty' || loadError.kind === 'no-results'),
       });
     } finally {
       if (requestId === latestRequestId.current) {
@@ -54,15 +80,17 @@ export function useQuiz() {
     }
   }, []);
 
-  // Load the first game once, and cancel any pending request if the screen goes away.
+  // Optionally load the first game, and cancel any pending request if the screen goes away.
   useEffect(() => {
-    startNewGame();
+    if (autoStart) startNewGame();
     return () => {
       latestRequestId.current++;
       activeController.current?.abort();
       activeController.current = null;
       isLoading.current = false;
     };
+    // autoStart is only read once, when the screen opens.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [startNewGame]);
 
   const playAgainWaitSeconds = useSecondsUntil(state.phase === 'finished' ? state.playAgainAvailableAt : null);
@@ -80,6 +108,7 @@ export function useQuiz() {
     phase: state.phase,
     isLoading: state.isLoading,
     errorMessage: state.errorMessage,
+    errorDetail: state.errorDetail,
     isEmptyResult: state.isEmptyResult,
     retryWaitSeconds,
     playAgainWaitSeconds,
@@ -93,5 +122,11 @@ export function useQuiz() {
     next: () => dispatch({ type: 'NEXT', now: Date.now() }),
     playAgain: requestNewGame,
     retry: requestNewGame,
+    /** Start a game now (used by "Quiz me"). Still respects a rate-limit wait. */
+    start: requestNewGame,
+    /** Go back to the start screen (AI Quiz "New topic"). */
+    reset: () => dispatch({ type: 'RESET' }),
   };
 }
+
+export type QuizController = ReturnType<typeof useQuiz>;

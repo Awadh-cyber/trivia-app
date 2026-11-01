@@ -7,18 +7,29 @@ export function LoadingState() {
 }
 
 interface ErrorStateProps {
+  title?: string;
   message: string;
+  /** Small technical note, e.g. "HTTP 429". */
+  detail?: string | null;
   onRetry: () => void;
   retryTitle?: string;
   retryDisabled?: boolean;
 }
 
-export function ErrorState({ message, onRetry, retryTitle = 'Retry', retryDisabled = false }: ErrorStateProps) {
+export function ErrorState({
+  title = 'We couldn’t load the questions',
+  message,
+  detail,
+  onRetry,
+  retryTitle = 'Retry',
+  retryDisabled = false,
+}: ErrorStateProps) {
   return (
     <StatusMessage
       emoji="😕"
-      title="We couldn’t load the questions"
+      title={title}
       message={message}
+      detail={detail}
       actionTitle={retryTitle}
       actionDisabled={retryDisabled}
       onAction={onRetry}
