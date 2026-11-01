@@ -1,10 +1,11 @@
 /**
  * AI Quiz settings.
  *
- * OPENROUTER_MODEL must be the exact free model name from the CODED class slide
- * (it ends in ":free"). AI Quiz shows a friendly "not set up" message until it is filled in.
+ * OPENROUTER_MODEL is a free OpenRouter model (it ends in ":free"). Chosen because it was
+ * available, supports JSON mode, and wrote accurate questions in testing (Nov 2026).
+ * Free models come and go: if it stops working, pick another ":free" model from openrouter.ai/models.
  */
-export const OPENROUTER_MODEL = '';
+export const OPENROUTER_MODEL = 'nvidia/nemotron-3.5-super-vl:free';
 
 export const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
 

@@ -47,7 +47,7 @@ This runs the TypeScript check and the Jest tests in `__tests__/`. The API tests
 
 ## AI Quiz setup (phone only)
 
-1. Put the free OpenRouter model name from class (it ends in `:free`) in `src/ai/config.ts` → `OPENROUTER_MODEL`.
+1. The model is set in `src/ai/config.ts` → `OPENROUTER_MODEL` (currently `nvidia/nemotron-3.5-super-vl:free`). Free models change over time, so swap in another `:free` model if it stops working.
 2. Create `.env.local` in the project folder containing `EXPO_PUBLIC_OPENROUTER_API_KEY=` followed by your key. Git ignores this file, so never commit it.
 3. Restart Expo: `npx expo start --clear`.
 
